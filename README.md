@@ -115,11 +115,14 @@ Open [http://localhost:3000](http://localhost:3000) to view the login screen and
 ## 🔬 How to Test / Evaluation Guide
 
 ### 1. Config & Channel Setup
-1. Go to the deployed URL, log in with the admin credentials.
-2. Navigate to **Config** page.
-3. Select or configure your server by entering the Guild ID and Name.
-4. Input your **Incidents Channel ID** (where bot posts cards) and **Mirror Channel Webhook URL** (e.g. your #ops-mirror channel webhook).
-5. Click **Save Configuration**. Click **Send test message** to verify the webhook connection.
+1. Go to the deployed URL, log in with the default admin credentials:
+   * **Email:** `admin@example.com`
+   * **Password:** `AdminPassword123!`
+2. Navigate to the **Config** page.
+3. Click the **🔌 Connect Bot** button at the top of the card. This will open the Discord OAuth2 window to add the bot to your server with all required scopes (`bot` and `applications.commands`).
+4. Select or configure your server by entering the Guild ID and Name in the form.
+5. Input your **Incidents Channel ID** (where bot posts cards) and **Mirror Channel Webhook URL** (e.g. your #ops-mirror channel webhook).
+6. Click **Save Configuration**. Click **Send test message** to verify the webhook connection.
 
 ### 2. Discord Incident Loop
 1. Run `/incident` in a text channel.
