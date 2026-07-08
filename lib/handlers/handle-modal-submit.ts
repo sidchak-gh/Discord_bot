@@ -1,16 +1,9 @@
 import { processIncident } from '@/lib/jobs/process-incident'
 import { upsertServerConfig } from '@/lib/db/queries/server-configs'
+import { after } from 'next/server'
 
-/**
- * Handles the MODAL_SUBMIT interaction (type 5) from the /incident modal.
- *
- * Flow:
- * 1. Return DEFERRED immediately (within 1s) — required to stay under Discord 3s limit
- * 2. Fire background job async (does NOT await — job runs after response is sent)
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function handleModalSubmit(body: any) {
-  // Extract modal field values
   const components = body.data?.components as Array<{
     components: Array<{ custom_id: string; value: string }>
   }>
@@ -29,23 +22,25 @@ export async function handleModalSubmit(body: any) {
   const appId      = body.application_id as string
   const token      = body.token as string
 
-  // Ensure server config exists (creates a blank row if first time)
   await upsertServerConfig(guildId, guildName, {})
 
-  // Fire background job — intentionally NOT awaited
-  // Response is already sent; this runs after
-  processIncident({
-    interactionId: body.id,
-    guildId,
-    userId,
-    userTag,
-    title,
-    description,
-    affectedSystem,
-    applicationId: appId,
-    token,
-  }).catch((err) => console.error('[handleModalSubmit] Job error:', err))
+  after(async () => {
+    try {
+      await processIncident({
+        interactionId: body.id,
+        guildId,
+        userId,
+        userTag,
+        title,
+        description,
+        affectedSystem,
+        applicationId: appId,
+        token,
+      })
+    } catch (err) {
+      console.error('[handleModalSubmit] Job error:', err)
+    }
+  })
 
-  // Return DEFERRED immediately — type 5 = DEFERRED_CHANNEL_MESSAGE_WITH_SOURCE
   return Response.json({ type: 5 })
 }

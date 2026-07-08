@@ -2,19 +2,8 @@ import { getIncidentById, updateIncident, logIncidentEvent } from '@/lib/db/quer
 import { getServerConfig } from '@/lib/db/queries/server-configs'
 import { buildUpdatedEmbed, editMessage, editDeferredResponse } from '@/lib/discord/respond'
 import { mirrorTextUpdate } from '@/lib/discord/mirror'
+import { after } from 'next/server'
 
-/**
- * Handles button clicks (interaction type 3 = MESSAGE_COMPONENT).
- * Supported buttons: claim_{id}, escalate_{id}, resolve_{id}
- *
- * Flow:
- * 1. Return DEFERRED immediately
- * 2. Parse custom_id to get action + incident ID
- * 3. Update DB
- * 4. Edit the original incident card in Discord
- * 5. Post text update to mirror channel
- * 6. Follow up the deferred response ephemerally
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function handleButton(body: any) {
   const customId: string = body.data?.custom_id ?? ''
@@ -23,17 +12,14 @@ export async function handleButton(body: any) {
   const appId    = body.application_id as string
   const token    = body.token as string
 
-  // Parse: "claim_42", "escalate_42", "resolve_42"
   const [action, incidentIdStr] = customId.split('_')
   const incidentId = parseInt(incidentIdStr, 10)
 
-  // Return DEFERRED immediately before doing any work
   const deferredResponse = Response.json({
-    type: 6, // DEFERRED_UPDATE_MESSAGE — silently defers, doesn't show "thinking"
+    type: 6,
   })
 
-  // Handle button action asynchronously
-  ;(async () => {
+  after(async () => {
     try {
       const incident = await getIncidentById(incidentId)
       if (!incident) return
@@ -67,11 +53,9 @@ export async function handleButton(body: any) {
         replyText = `✅ **INC-${incidentId}** resolved by <@${userId}>.`
       }
 
-      // Fetch updated incident
       const updated = await getIncidentById(incidentId)
       if (!updated) return
 
-      // Edit the original incident card — update embed, remove buttons
       if (updated.discordMessageId && updated.discordChannelId) {
         try {
           const updatedEmbed = buildUpdatedEmbed(
@@ -98,14 +82,13 @@ export async function handleButton(body: any) {
           )
           await editMessage(updated.discordChannelId, updated.discordMessageId, {
             embeds: [updatedEmbed],
-            components: [], // Remove buttons after action
+            components: [],
           })
         } catch (err) {
           console.error('[Button] Failed to edit incident card:', err)
         }
       }
 
-      // Mirror update to second channel
       if (config?.mirrorWebhookUrl && replyText) {
         try {
           await mirrorTextUpdate(config.mirrorWebhookUrl, replyText)
@@ -115,7 +98,6 @@ export async function handleButton(body: any) {
         }
       }
 
-      // Ephemeral confirmation to the user who clicked
       await editDeferredResponse(appId, token, {
         content: replyText || `✅ Action completed on INC-${incidentId}.`,
         flags: 64,
@@ -129,7 +111,7 @@ export async function handleButton(body: any) {
         })
       } catch { /* ignore */ }
     }
-  })().catch(console.error)
+  })
 
   return deferredResponse
 }

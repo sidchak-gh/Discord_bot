@@ -2,14 +2,8 @@ import { getIncidentById, updateIncident, logIncidentEvent } from '@/lib/db/quer
 import { getServerConfig } from '@/lib/db/queries/server-configs'
 import { buildUpdatedEmbed, editMessage, editDeferredResponse } from '@/lib/discord/respond'
 import { mirrorTextUpdate } from '@/lib/discord/mirror'
+import { after } from 'next/server'
 
-/**
- * Handles the /resolve <incident_id> slash command.
- *
- * Flow:
- * 1. Return DEFERRED immediately (type 5)
- * 2. Look up incident, mark resolved, update Discord card, mirror
- */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export async function handleSlashResolve(body: any) {
   const incidentId = body.data?.options?.[0]?.value as number | undefined
@@ -18,11 +12,9 @@ export async function handleSlashResolve(body: any) {
   const appId      = body.application_id as string
   const token      = body.token as string
 
-  // Return DEFERRED immediately
   const deferredResponse = Response.json({ type: 5, data: { flags: 64 } })
 
-  // Handle resolve asynchronously
-  ;(async () => {
+  after(async () => {
     try {
       if (!incidentId) {
         await editDeferredResponse(appId, token, {
@@ -49,11 +41,9 @@ export async function handleSlashResolve(body: any) {
         return
       }
 
-      // Update DB
       await updateIncident(incidentId, { status: 'resolved', resolvedAt: new Date() })
       await logIncidentEvent(incidentId, 'resolved', userId, userTag, { via: 'slash_command' })
 
-      // Update the Discord card if it exists
       const updated = await getIncidentById(incidentId)
       if (updated?.discordMessageId && updated?.discordChannelId) {
         try {
@@ -81,14 +71,13 @@ export async function handleSlashResolve(body: any) {
           )
           await editMessage(updated.discordChannelId, updated.discordMessageId, {
             embeds: [updatedEmbed],
-            components: [], // Remove buttons
+            components: [],
           })
         } catch (err) {
           console.error('[Resolve] Failed to edit incident card:', err)
         }
       }
 
-      // Mirror to second channel
       const config = await getServerConfig(incident.guildId)
       if (config?.mirrorWebhookUrl) {
         try {
@@ -117,7 +106,7 @@ export async function handleSlashResolve(body: any) {
         })
       } catch { /* ignore */ }
     }
-  })().catch(console.error)
+  })
 
   return deferredResponse
 }
