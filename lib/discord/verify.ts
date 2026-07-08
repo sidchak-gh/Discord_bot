@@ -7,15 +7,15 @@ import { verifyKey } from 'discord-interactions'
  * IMPORTANT: rawBody must be the raw text string — NOT parsed JSON.
  * The signature is computed over the raw bytes, so parsing first breaks verification.
  */
-export function verifyDiscordSignature(
+export async function verifyDiscordSignature(
   publicKey: string,
   rawBody: string,
   signature: string | null,
   timestamp: string | null
-): boolean {
+): Promise<boolean> {
   if (!signature || !timestamp) return false
   try {
-    return verifyKey(rawBody, signature, timestamp, publicKey)
+    return await verifyKey(rawBody, signature, timestamp, publicKey)
   } catch {
     return false
   }
