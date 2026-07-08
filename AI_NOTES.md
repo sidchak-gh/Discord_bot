@@ -23,30 +23,16 @@ I made three critical decisions to maintain the quality bar:
 
 ---
 
-## 🐛 Hardest Bug & Resolution
+## 🐛 Hardest Bugs & Resolutions
 
-During compilation, Next.js failed with the following TypeScript error:
-```bash
-./lib/discord/verify.ts:18:5
-Type error: Type 'Promise<boolean>' is not assignable to type 'boolean'.
-```
+### Bug 1: Promise type mismatch during static build compilation
+* **What Happened:** The AI assumed that `verifyKey` from the `discord-interactions` library was a synchronous verification check. However, in newer versions of the library, `verifyKey` is asynchronous and returns a `Promise<boolean>`. This caused Next.js static build compilation to fail.
+* **Resolution:** I caught this compilation error during a trial build. I refactored `verifyDiscordSignature` in `lib/discord/verify.ts` to be `async` and properly awaited the signature check inside `/api/discord/interactions/route.ts` before routing the payload.
 
-### What Happened
-The AI assumed that `verifyKey` from the `discord-interactions` library was a synchronous verification check. However, in newer versions of the library, `verifyKey` is asynchronous and returns a `Promise<boolean>` due to its underlying cryptography primitives.
-
-### How I Fixed It
-I caught this compilation error during a trial build. To resolve it:
-1. I refactored `verifyDiscordSignature` in `lib/discord/verify.ts` to be an `async` function returning `Promise<boolean>`, awaiting the `verifyKey` call.
-2. I updated the router endpoint `app/api/discord/interactions/route.ts` to properly `await` the signature check before routing:
-   ```typescript
-   const isValid = await verifyDiscordSignature(
-     process.env.DISCORD_PUBLIC_KEY!,
-     rawBody,
-     signature,
-     timestamp
-   )
-   ```
-This resolved the type error and ensured the compiler passed cleanly.
+### Bug 2: Vercel Lambda execution freeze on background promises
+* **What Happened:** When deploying to Vercel, slash commands and modal interactions would hang indefinitely or take 10+ minutes to execute, whereas they completed instantly in local development. 
+* **The Cause:** This was a classic serverless gotcha. Locally, Node.js runs a persistent event loop, so calling the background job `processIncident` asynchronously (non-blocking) and immediately returning the HTTP response (`return Response.json({ type: 5 })`) works perfectly. On Vercel, as soon as a Serverless Lambda function returns the HTTP response, the container is frozen/suspended instantly. The background promise was put to sleep mid-execution and would only wake up if thawed by a subsequent request minutes later.
+* **Resolution:** I imported the native Next.js 15/16 **`after`** API from `next/server` and wrapped the background jobs (modal submission, button clicks, and `/resolve` operations) inside the `after()` callback. This tells Next.js and Vercel to return the response immediately to Discord to avoid timeouts, but keeps the execution container active until the background database updates, AI triage, and mirroring flows complete successfully.
 
 ---
 
